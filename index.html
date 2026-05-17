@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오늘의 거울</title>
+
+  <!--
+    ============================================================
+    스타일 (CSS): 화면이 어떻게 보일지 결정하는 부분
+    ============================================================
+  -->
+  <style>
+    /* 페이지 전체에 적용되는 기본 설정 */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Georgia', serif;
+    }
+
+    /*
+      배경: 따뜻한 욕실 분위기
+      여러 개의 방사형 그라데이션(radial-gradient)을 겹쳐서
+      촛불이나 백열등 빛이 은은하게 퍼지는 느낌을 냄
+    */
+    body {
+      background:
+        radial-gradient(ellipse at 30% 20%, rgba(255, 180, 120, 0.35), transparent 50%),
+        radial-gradient(ellipse at 80% 70%, rgba(255, 140, 90, 0.25), transparent 55%),
+        radial-gradient(ellipse at 50% 100%, rgba(180, 100, 60, 0.4), transparent 60%),
+        linear-gradient(180deg, #2a1810 0%, #3d2418 40%, #4a2e1c 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    /* 배경에 살짝 깔리는 욕실 타일 느낌의 미세한 패턴 */
+    body::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          rgba(255, 200, 150, 0.02) 0px,
+          rgba(255, 200, 150, 0.02) 2px,
+          transparent 2px,
+          transparent 80px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          rgba(255, 200, 150, 0.02) 0px,
+          rgba(255, 200, 150, 0.02) 2px,
+          transparent 2px,
+          transparent 80px
+        );
+      pointer-events: none;
+    }
+
+    /*
+      거울 전체 컨테이너
+      perspective: 거울 회전 시 3D 느낌을 주기 위함
+    */
+    .mirror-container {
+      position: relative;
+      width: 420px;
+      height: 580px;
+      perspective: 1200px;
+    }
+
+    /*
+      거울 프레임 (크림색 테두리)
+      참고 이미지의 따뜻한 크림색 프레임을 흉내냄
+    */
+    .mirror-frame {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #e8d4b8 0%, #d4b896 50%, #c4a47c 100%);
+      border-radius: 8px;
+      padding: 50px 50px;
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        inset 0 2px 4px rgba(255, 255, 255, 0.3),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    /*
+      거울 안쪽 화면 (실제 카메라 영상이 나오는 곳)
+      overflow: hidden 으로 영상이 테두리 밖으로 안 나가게
+    */
+    .mirror-screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #1a0e08;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
+    }
+
+    /*
+      카메라 영상
+      transform: scaleX(-1)로 좌우 반전 (거울 효과)
+      transition: 상하 반전 시 부드럽게 전환되도록
+    */
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      transition: transform 0.6s ease;
+    }
+
+    /* 상하 반전 상태 (JS로 클래스 토글) */
+    #video.flipped {
+      transform: scaleX(-1) scaleY(-1);
+    }
+
+    /*
+      카메라 권한 대기/거부 상태 안내 메시지
+      JS에서 카메라가 시작되면 숨김
+    */
+    .camera-message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #d4b896;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    /*
+      거울 위에 떠 있는 질문/버튼 오버레이
+      .hidden 클래스가 붙으면 사라짐
+    */
+    .overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 10;
+      transition: opacity 0.8s ease;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .question {
+      color: #fff5e6;
+      font-size: 26px;
+      margin-bottom: 24px;
+      text-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.8),
+        0 0 20px rgba(255, 180, 120, 0.4);
+      letter-spacing: 1px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 12px 28px;
+      font-size: 16px;
+      font-family: 'Georgia', serif;
+      background: rgba(255, 245, 230, 0.15);
+      color: #fff5e6;
+      border: 1.5px solid rgba(255, 245, 230, 0.6);
+      border-radius: 30px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    .btn:hover {
+      background: rgba(255, 245, 230, 0.3);
+      transform: scale(1.05);
+    }
+
+    /*
+      ============================================================
+      거울 테두리에 박힌 전구들
+      이미지를 참고해서 상단 3개, 양 옆 4개씩, 하단 3개 = 총 14개
+      절대 위치(absolute)로 하나하나 배치
+      ============================================================
+    */
+    .bulb {
+      position: absolute;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff8dc 0%, #ffd98a 40%, #d4a050 100%);
+      box-shadow:
+        0 0 20px rgba(255, 220, 150, 0.9),
+        0 0 40px rgba(255, 200, 120, 0.6),
+        0 0 60px rgba(255, 180, 100, 0.4),
+        inset 0 -3px 6px rgba(180, 120, 60, 0.4);
+      z-index: 5;
+    }
+
+    /* 상단 전구 3개 */
+    .bulb.top-1 { top: 8px; left: 50px; }
+    .bulb.top-2 { top: 8px; left: 50%; transform: translateX(-50%); }
+    .bulb.top-3 { top: 8px; right: 50px; }
+
+    /* 왼쪽 전구 4개 */
+    .bulb.left-1 { top: 130px; left: 8px; }
+    .bulb.left-2 { top: 250px; left: 8px; }
+    .bulb.left-3 { top: 370px; left: 8px; }
+    .bulb.left-4 { top: 490px; left: 8px; }
+
+    /* 오른쪽 전구 4개 (맨 아래 것이 노브가 됨) */
+    .bulb.right-1 { top: 130px; right: 8px; }
+    .bulb.right-2 { top: 250px; right: 8px; }
+    .bulb.right-3 { top: 370px; right: 8px; }
+
+    /*
+      오른쪽 맨 아래 전구 = 오르골 노브
+      커서를 grab으로 바꿔서 "잡을 수 있다"는 시각적 단서를 줌
+    */
+    .knob {
+      top: 490px;
+      right: 8px;
+      cursor: grab;
+      transition: background 0.5s ease, box-shadow 0.5s ease;
+    }
+
+    .knob:active {
+      cursor: grabbing;
+    }
+
+    /* 노브 위의 작은 표식 (어디까지 돌렸는지 보이게) */
+    .knob::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      height: 8px;
+      background: rgba(120, 70, 30, 0.7);
+      border-radius: 2px;
+    }
+
+    /*
+      노브 색상 단계 (JS에서 .stage-1, 2, 3, 4 클래스 부여)
+      주황 → 분홍 → 하늘 → 흰색
+    */
+    .knob.stage-1 {
+      background: radial-gradient(circle at 35% 35%, #fff0d0 0%, #ff9a4a 40%, #cc5a1a 100%);
+      box-shadow:
+        0 0 25px rgba(255, 140, 60, 1),
+        0 0 50px rgba(255, 120, 40, 0.7),
+        0 0 80px rgba(255, 100, 20, 0.5);
+    }
+    .knob.stage-2 {
+      background: radial-gradient(circle at 35% 35%, #fff0f5 0%, #ff9ac8 40%, #cc4a8a 100%);
+      box-shadow:
+        0 0 25px rgba(255, 150, 200, 1),
+        0 0 50px rgba(255, 130, 180, 0.7),
+        0 0 80px rgba(255, 110, 160, 0.5);
+    }
+    .knob.stage-3 {
+      background: radial-gradient(circle at 35% 35%, #f0fcff 0%, #9ad8ff 40%, #4a98cc 100%);
+      box-shadow:
+        0 0 25px rgba(150, 210, 255, 1),
+        0 0 50px rgba(130, 190, 255, 0.7),
+        0 0 80px rgba(110, 170, 255, 0.5);
+    }
+    .knob.stage-4 {
+      background: radial-gradient(circle at 35% 35%, #ffffff 0%, #f5f5f5 40%, #c0c0c0 100%);
+      box-shadow:
+        0 0 30px rgba(255, 255, 255, 1),
+        0 0 60px rgba(255, 255, 255, 0.8),
+        0 0 100px rgba(255, 255, 255, 0.6);
+    }
+
+    /* 노브 회전 각도는 인라인 스타일로 JS에서 설정 */
+
+    /*
+      노브 옆에 떠 있는 작은 힌트
+      처음에만 보이고 사용자가 한 번 돌리면 사라짐
+    */
+    .knob-hint {
+      position: absolute;
+      bottom: 30px;
+      right: 60px;
+      color: rgba(255, 245, 230, 0.6);
+      font-size: 12px;
+      font-style: italic;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    }
+
+    .knob-hint.hidden {
+      opacity: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!--
+    ============================================================
+    거울 전체 구조 (HTML)
+    ============================================================
+  -->
+  <div class="mirror-container">
+
+    <!-- 거울 프레임 (크림색 테두리) -->
+    <div class="mirror-frame">
+
+      <!-- 거울 안쪽 (카메라 영상 + 오버레이) -->
+      <div class="mirror-screen">
+
+        <!-- 카메라 영상이 들어갈 곳 -->
+        <video id="video" autoplay playsinline muted></video>
+
+        <!-- 카메라 권한 안내 메시지 (영상이 시작되면 JS가 숨김) -->
+        <div class="camera-message" id="cameraMessage">
+          거울을 켜려면 카메라 권한을 허용해주세요
+        </div>
+
+        <!-- 질문/버튼 오버레이 -->
+        <div class="overlay" id="overlay">
+          <div class="question">지금 기분이 어때요?</div>
+          <div class="buttons">
+            <button class="btn" id="btnGood">괜찮아</button>
+            <button class="btn" id="btnBad">별로야</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 상단 전구 3개 -->
+    <div class="bulb top-1"></div>
+    <div class="bulb top-2"></div>
+    <div class="bulb top-3"></div>
+
+    <!-- 왼쪽 전구 4개 -->
+    <div class="bulb left-1"></div>
+    <div class="bulb left-2"></div>
+    <div class="bulb left-3"></div>
+    <div class="bulb left-4"></div>
+
+    <!-- 오른쪽 전구 3개 + 노브 1개 -->
+    <div class="bulb right-1"></div>
+    <div class="bulb right-2"></div>
+    <div class="bulb right-3"></div>
+    <div class="bulb knob" id="knob"></div>
+
+    <!-- 노브 힌트 -->
+    <div class="knob-hint" id="knobHint">← 돌려보세요</div>
+
+  </div>
+
+  <!--
+    ============================================================
+    스크립트 (JavaScript): 동작을 만드는 부분
+    ============================================================
+  -->
+  <script>
+    // ============================================================
+    // 1. 카메라 시작
+    // ============================================================
+    // navigator.mediaDevices.getUserMedia: 브라우저가 카메라/마이크에 접근하는 표준 API
+    // HTTPS 환경에서만 동작함 (Vercel은 자동으로 HTTPS 제공하니 OK)
+
+    const video = document.getElementById('video');
+    const cameraMessage = document.getElementById('cameraMessage');
+
+    async function startCamera() {
+      try {
+        // 사용자에게 카메라 권한을 요청. user-facing 카메라(전면) 선호
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false
+        });
+        video.srcObject = stream;
+        cameraMessage.style.display = 'none';
+      } catch (err) {
+        // 권한 거부 또는 카메라 없음
+        cameraMessage.textContent = '카메라를 사용할 수 없어요.\n권한을 확인하거나 다시 시도해주세요.';
+        console.error('카메라 에러:', err);
+      }
+    }
+
+    startCamera();
+
+    // ============================================================
+    // 2. 질문 버튼 동작 (상하 반전 + 오버레이 사라짐)
+    // ============================================================
+    const overlay = document.getElementById('overlay');
+    const btnGood = document.getElementById('btnGood');
+    const btnBad = document.getElementById('btnBad');
+
+    // [괜찮아] 클릭: 영상 상하 반전 + 오버레이 사라짐
+    btnGood.addEventListener('click', () => {
+      video.classList.toggle('flipped');
+      overlay.classList.add('hidden');
+    });
+
+    // [별로야] 클릭: 영상 상하 반전 + 오버레이 사라짐
+    // (두 버튼 모두 "한 번 뒤집기"라서 효과는 같지만,
+    //  나중에 다르게 만들고 싶으면 여기를 바꾸면 됨)
+    btnBad.addEventListener('click', () => {
+      video.classList.toggle('flipped');
+      overlay.classList.add('hidden');
+    });
+
+    // ============================================================
+    // 3. 노브 회전 + 오르골 음악
+    // ============================================================
+    const knob = document.getElementById('knob');
+    const knobHint = document.getElementById('knobHint');
+
+    let rotation = 0;          // 노브의 현재 회전 각도 (도)
+    let isDragging = false;    // 지금 드래그 중인지
+    let lastAngle = 0;         // 직전 마우스 각도 (드래그 차이 계산용)
+    let totalRotation = 0;     // 누적 회전 (단계 변경 트리거용)
+    let currentStage = 0;      // 현재 색깔 단계 (0=꺼짐, 1~4=색상)
+    let audioStarted = false;  // 오디오가 시작됐는지
+
+    // 노브의 중심 좌표를 구하는 함수 (마우스 각도 계산에 필요)
+    function getKnobCenter() {
+      const rect = knob.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2
+      };
+    }
+
+    // 마우스 위치 → 노브 중심 기준 각도(도) 계산
+    function getAngle(mouseX, mouseY) {
+      const center = getKnobCenter();
+      // Math.atan2: 두 점 사이의 각도를 라디안으로 반환. 도(degree)로 변환
+      return Math.atan2(mouseY - center.y, mouseX - center.x) * (180 / Math.PI);
+    }
+
+    // 드래그 시작
+    knob.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      lastAngle = getAngle(e.clientX, e.clientY);
+      e.preventDefault();
+    });
+
+    // 드래그 중 (window 전체에 걸어야 노브 밖으로 나가도 추적 가능)
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+
+      const currentAngle = getAngle(e.clientX, e.clientY);
+      let delta = currentAngle - lastAngle;
+
+      // 각도가 -180 → 180 같이 점프할 때 보정
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+
+      // "오른쪽으로(시계방향) 돌릴 때만" 작동시키고 싶으면
+      // delta가 양수일 때만 누적. 반대 방향은 무시.
+      if (delta > 0) {
+        rotation += delta;
+        totalRotation += delta;
+        knob.style.transform = `rotate(${rotation}deg)`;
+
+        // 일정량 돌릴 때마다 다음 단계로
+        // 한 단계당 90도 정도 돌리면 색상 변경
+        const newStage = Math.min(4, Math.floor(totalRotation / 90) + 1);
+        if (newStage !== currentStage) {
+          setStage(newStage);
+        }
+      }
+
+      lastAngle = currentAngle;
+    });
+
+    // 드래그 끝
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    // 터치 지원 (모바일에서도 동작하게)
+    knob.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      const touch = e.touches[0];
+      lastAngle = getAngle(touch.clientX, touch.clientY);
+      e.preventDefault();
+    });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const touch = e.touches[0];
+      const currentAngle = getAngle(touch.clientX, touch.clientY);
+      let delta = currentAngle - lastAngle;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      if (delta > 0) {
+        rotation += delta;
+        totalRotation += delta;
+        knob.style.transform = `rotate(${rotation}deg)`;
+        const newStage = Math.min(4, Math.floor(totalRotation / 90) + 1);
+        if (newStage !== currentStage) {
+          setStage(newStage);
+        }
+      }
+      lastAngle = currentAngle;
+    });
+
+    window.addEventListener('touchend', () => {
+      isDragging = false;
+    });
+
+    // 단계 변경 함수: 색깔 바꾸고, 음악 재생 시작 (처음 한 번)
+    function setStage(stage) {
+      // 이전 stage 클래스 제거
+      knob.classList.remove('stage-1', 'stage-2', 'stage-3', 'stage-4');
+      // 새 stage 클래스 추가
+      knob.classList.add(`stage-${stage}`);
+      currentStage = stage;
+
+      // 힌트 숨기기
+      knobHint.classList.add('hidden');
+
+      // 음악이 아직 시작 안 됐으면 시작
+      if (!audioStarted) {
+        startMusicBox();
+        audioStarted = true;
+      }
+    }
+
+    // ============================================================
+    // 4. Web Audio API로 오르골 멜로디 생성
+    // ============================================================
+    // Web Audio API: 브라우저에서 코드로 소리를 만드는 표준 API
+    // 오르골 음색 = 짧은 어택 + 빠른 감쇠 + 사인파 위주 + 약간의 배음
+
+    function startMusicBox() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // 간단한 자장가 풍 멜로디 (C장조)
+      // 음표: 음 이름(주파수 Hz)과 길이(초)
+      const C5 = 523.25;
+      const D5 = 587.33;
+      const E5 = 659.25;
+      const G5 = 783.99;
+      const A5 = 880.00;
+      const C6 = 1046.50;
+
+      // "반짝반짝 작은별" 비슷한 따뜻한 루프
+      const melody = [
+        { freq: C5, dur: 0.5 },
+        { freq: C5, dur: 0.5 },
+        { freq: G5, dur: 0.5 },
+        { freq: G5, dur: 0.5 },
+        { freq: A5, dur: 0.5 },
+        { freq: A5, dur: 0.5 },
+        { freq: G5, dur: 1.0 },
+        { freq: E5, dur: 0.5 },
+        { freq: E5, dur: 0.5 },
+        { freq: D5, dur: 0.5 },
+        { freq: D5, dur: 0.5 },
+        { freq: C5, dur: 1.0 },
+      ];
+
+      // 한 음을 재생하는 함수
+      function playNote(freq, startTime, duration) {
+        // 오실레이터: 소리의 기본 파형
+        const osc = oscillator(freq, 'sine');
+        // 약간의 배음(2배 주파수)을 더해서 오르골 같은 금속성 느낌
+        const osc2 = oscillator(freq * 2, 'triangle');
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0, startTime);
+        // 빠른 어택 (오르골은 띵! 하고 빠르게 시작)
+        gain.gain.linearRampToValueAtTime(0.25, startTime + 0.01);
+        // 천천히 감쇠
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+        const gain2 = audioCtx.createGain();
+        gain2.gain.setValueAtTime(0, startTime);
+        gain2.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
+        gain2.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.7);
+
+        osc.connect(gain).connect(audioCtx.destination);
+        osc2.connect(gain2).connect(audioCtx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+        osc2.start(startTime);
+        osc2.stop(startTime + duration);
+      }
+
+      // 오실레이터 만드는 헬퍼
+      function oscillator(freq, type) {
+        const osc = audioCtx.createOscillator();
+        osc.type = type;
+        osc.frequency.value = freq;
+        return osc;
+      }
+
+      // 멜로디를 반복 재생하는 함수
+      function playMelody(startTime) {
+        let t = startTime;
+        for (const note of melody) {
+          playNote(note.freq, t, note.dur);
+          t += note.dur;
+        }
+        // 멜로디 끝나고 0.5초 후 다시 재생 (루프)
+        setTimeout(() => playMelody(audioCtx.currentTime), (t - startTime + 0.5) * 1000);
+      }
+
+      playMelody(audioCtx.currentTime);
+    }
+  </script>
+</body>
+</html>

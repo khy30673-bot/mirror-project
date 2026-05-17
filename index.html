@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오늘의 거울</title>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Georgia', serif;
+      /*
+        픽셀 아트 게임 느낌을 살리기 위해 폰트도 픽셀 폰트로
+        - "Press Start 2P" 같은 폰트는 외부에서 가져와야 하는데, 의존성 최소화 위해 시스템 폰트 사용
+      */
+    }
+
+    body {
+      background: #2d2438;  /* 어두운 보라색 벽 (픽셀 게임의 밤하늘 같은 외부 톤) */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      /*
+        픽셀 게임 느낌을 위해 픽셀 폰트 사용
+        - 시스템에 없으면 monospace로 폴백
+      */
+      font-family: 'Courier New', 'Consolas', monospace;
+    }
+
+    /*
+      ============================================================
+      픽셀 아트 핵심 트릭: image-rendering: pixelated
+      SVG/이미지를 확대해도 안티앨리어싱 없이 또렷한 픽셀로 표시됨
+      이 속성을 SVG 요소들에 적용함으로써 픽셀화 효과를 냄
+      ============================================================
+    */
+    svg {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      shape-rendering: crispEdges;  /* SVG path도 픽셀처럼 */
+    }
+
+    /*
+      ============================================================
+      창문 (전체 화면)
+      픽셀 게임 UI 느낌의 두꺼운 베젤 + 입체 테두리
+      ============================================================
+    */
+    .window {
+      position: absolute;
+      top: 6%;
+      left: 5%;
+      right: 5%;
+      bottom: 6%;
+      /* 픽셀 게임 UI 특유의 입체 테두리 (밝은 위/왼쪽, 어두운 아래/오른쪽) */
+      background: #f0e0a8;
+      border-top: 8px solid #fff5d0;
+      border-left: 8px solid #fff5d0;
+      border-right: 8px solid #b89860;
+      border-bottom: 8px solid #b89860;
+      box-shadow:
+        0 0 0 4px #6a4830,
+        0 0 0 8px #4a3020,
+        12px 12px 0 #1a1018;  /* 픽셀 게임 특유의 hard shadow (블러 없는 그림자) */
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    /* 창틀 안쪽 (실제 유리 영역) */
+    .glass-area {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      overflow: hidden;
+    }
+
+    /*
+      ============================================================
+      픽셀 풍경 (SVG로 그린 후 픽셀화)
+      각 요소를 정수 좌표에 배치해서 픽셀 그리드에 맞춤
+      ============================================================
+    */
+    .scene {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      /* SVG를 픽셀 그리드로 보이게 */
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    /*
+      픽셀 구름 - CSS만으로 작은 사각형들을 조합해 만든 픽셀 모양
+      각 div의 box-shadow에 여러 점을 찍어 픽셀 클러스터를 형성
+    */
+    .pixel-cloud {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background: #ffffff;
+      /*
+        box-shadow의 다중 그림자 트릭:
+        한 div에 여러 개의 8x8 픽셀 그림자를 찍어서 픽셀 아트 한 덩어리를 만듦
+        형식: "X Y 0 0 색상"
+      */
+      box-shadow:
+        8px 0 0 #ffffff, 16px 0 0 #ffffff, 24px 0 0 #ffffff, 32px 0 0 #ffffff,
+        -8px 0 0 #ffffff, -16px 0 0 #ffffff,
+        0 -8px 0 #ffffff, 8px -8px 0 #ffffff, 16px -8px 0 #ffffff, 24px -8px 0 #ffffff,
+        16px -16px 0 #ffffff, 24px -16px 0 #ffffff,
+        8px 8px 0 #e0e0e8, 16px 8px 0 #e0e0e8, 24px 8px 0 #e0e0e8, 32px 8px 0 #e0e0e8;
+      animation: cloudDrift 60s linear infinite;
+    }
+
+    .pixel-cloud.c1 { top: 12%; left: 18%; }
+    .pixel-cloud.c2 { top: 22%; left: 55%; animation-delay: -20s; }
+    .pixel-cloud.c3 { top: 8%;  left: 78%; animation-delay: -40s; }
+
+    @keyframes cloudDrift {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(40px); }
+    }
+
+    /*
+      ============================================================
+      픽셀 잎 (16x16 픽셀 도트)
+      ::before / ::after / box-shadow 조합으로 작은 잎 모양을 그림
+      ============================================================
+    */
+    .pixel-leaf {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: transparent;
+      transform-origin: 50% 100%;
+      animation: leafWiggle 3s ease-in-out infinite;
+    }
+
+    /*
+      각 잎은 4x4 픽셀을 단위로 모자이크 형태로 box-shadow에 찍음
+      잎 모양 (대략적인 16x16 도트 패턴):
+        . . X X X X . .
+        . X X X X X X .
+        X X G G G X X X      G = 밝은 녹색
+        X G G G G G G X
+        X G G G G G G X
+        X X G G G X X X
+        . X X X X X X .
+        . . X X X X . .
+      4px 단위로 좌표를 만듦
+    */
+    .pixel-leaf::before {
+      content: '';
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--leaf-light, #6ec048);
+      /* 잎의 안쪽 (밝은 녹색) - 픽셀 모자이크 */
+      box-shadow:
+        4px 0 0 var(--leaf-light, #6ec048),
+        8px 0 0 var(--leaf-light, #6ec048),
+        12px 0 0 var(--leaf-light, #6ec048),
+        0 4px 0 var(--leaf-light, #6ec048),
+        4px 4px 0 var(--leaf-light, #6ec048),
+        8px 4px 0 var(--leaf-light, #6ec048),
+        12px 4px 0 var(--leaf-light, #6ec048),
+        16px 4px 0 var(--leaf-light, #6ec048),
+        0 8px 0 var(--leaf-light, #6ec048),
+        4px 8px 0 var(--leaf-light, #6ec048),
+        8px 8px 0 var(--leaf-light, #6ec048),
+        12px 8px 0 var(--leaf-light, #6ec048),
+        16px 8px 0 var(--leaf-light, #6ec048),
+        4px 12px 0 var(--leaf-light, #6ec048),
+        8px 12px 0 var(--leaf-light, #6ec048),
+        12px 12px 0 var(--leaf-light, #6ec048);
+    }
+
+    /* 잎 테두리 (진한 녹색 외곽선) */
+    .pixel-leaf::after {
+      content: '';
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--leaf-dark, #2c6020);
+      /* 외곽 테두리 픽셀들 */
+      box-shadow:
+        /* 위쪽 */
+        4px -4px 0 var(--leaf-dark, #2c6020),
+        8px -4px 0 var(--leaf-dark, #2c6020),
+        12px -4px 0 var(--leaf-dark, #2c6020),
+        /* 왼쪽/오른쪽 */
+        -4px 0 0 var(--leaf-dark, #2c6020),
+        -4px 4px 0 var(--leaf-dark, #2c6020),
+        16px 0 0 var(--leaf-dark, #2c6020),
+        20px 4px 0 var(--leaf-dark, #2c6020),
+        -4px 8px 0 var(--leaf-dark, #2c6020),
+        20px 8px 0 var(--leaf-dark, #2c6020),
+        0 12px 0 var(--leaf-dark, #2c6020),
+        16px 12px 0 var(--leaf-dark, #2c6020),
+        /* 아래 */
+        4px 16px 0 var(--leaf-dark, #2c6020),
+        8px 16px 0 var(--leaf-dark, #2c6020),
+        12px 16px 0 var(--leaf-dark, #2c6020),
+        /* 중앙 잎맥 (한 칸 진하게) */
+        8px 4px 0 var(--leaf-vein, #4c8838),
+        8px 8px 0 var(--leaf-vein, #4c8838);
+    }
+
+    @keyframes leafWiggle {
+      0%, 100% { transform: rotate(var(--rot, 0deg)); }
+      50%      { transform: rotate(calc(var(--rot, 0deg) + 10deg)); }
+    }
+
+    /*
+      나뭇가지 - 픽셀로 그린 굵은 곡선
+      여러 사각형을 box-shadow로 이어붙임
+    */
+    .branch-pixel {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #5a3c20;
+    }
+
+    /*
+      ============================================================
+      4칸 분할 창살 (픽셀 게임 UI 느낌의 입체 창틀)
+      ============================================================
+    */
+    .window-bars {
+      position: absolute;
+      top: 16px; left: 16px; right: 16px; bottom: 16px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* 가로 창살 */
+    .window-bars::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0; right: 0;
+      height: 24px;
+      transform: translateY(-50%);
+      background: #f0e0a8;
+      border-top: 4px solid #fff5d0;
+      border-bottom: 4px solid #b89860;
+    }
+
+    /* 세로 창살 */
+    .window-bars::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0; bottom: 0;
+      width: 24px;
+      transform: translateX(-50%);
+      background: #f0e0a8;
+      border-left: 4px solid #fff5d0;
+      border-right: 4px solid #b89860;
+    }
+
+    /*
+      ============================================================
+      거울 (픽셀 아닌 부드러운 상태 유지 - 사용자 요청)
+      단, 픽셀 배경과 어울리도록 약간의 픽셀스러운 hard shadow 추가
+      ============================================================
+    */
+    .mirror-container {
+      position: relative;
+      width: 500px;
+      height: 680px;
+      perspective: 1500px;
+      z-index: 20;
+    }
+
+    .mirror-rotator {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+    }
+
+    .mirror-rotator.flip-up   { animation: flipUp   1.4s ease-in-out; }
+    .mirror-rotator.flip-down { animation: flipDown 1.4s ease-in-out; }
+
+    @keyframes flipUp {
+      0%   { transform: rotateX(0deg); }
+      100% { transform: rotateX(360deg); }
+    }
+    @keyframes flipDown {
+      0%   { transform: rotateX(0deg); }
+      100% { transform: rotateX(-360deg); }
+    }
+
+    .mirror-frame {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #ece0c8 0%, #d8c4a4 50%, #c8b288 100%);
+      border-radius: 10px;
+      padding: 60px 60px;
+      box-shadow:
+        0 25px 80px rgba(0, 0, 0, 0.55),
+        inset 0 2px 6px rgba(255, 255, 255, 0.35),
+        inset 0 -2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .mirror-screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #1a0e08;
+      border-radius: 5px;
+      overflow: hidden;
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.8);
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    .camera-message {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #d4b896;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 10;
+      transition: opacity 0.8s ease;
+    }
+    .overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .question {
+      color: #fff5e6;
+      font-size: 30px;
+      margin-bottom: 28px;
+      text-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.8),
+        0 0 24px rgba(255, 180, 120, 0.4);
+      letter-spacing: 1px;
+      font-family: 'Georgia', serif;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 14px 32px;
+      font-size: 17px;
+      font-family: 'Georgia', serif;
+      background: rgba(255, 245, 230, 0.15);
+      color: #fff5e6;
+      border: 1.5px solid rgba(255, 245, 230, 0.6);
+      border-radius: 30px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    .btn:hover {
+      background: rgba(255, 245, 230, 0.3);
+      transform: scale(1.05);
+    }
+
+    /* 전구 (그대로) */
+    .bulb {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff8dc 0%, #ffd98a 40%, #d4a050 100%);
+      box-shadow:
+        0 0 25px rgba(255, 220, 150, 0.9),
+        0 0 50px rgba(255, 200, 120, 0.6),
+        0 0 75px rgba(255, 180, 100, 0.4),
+        inset 0 -3px 6px rgba(180, 120, 60, 0.4);
+      z-index: 5;
+      transition: background 1.5s ease, box-shadow 1.5s ease;
+    }
+
+    .bulb.top-1 { top: 10px; left: 60px; }
+    .bulb.top-2 { top: 10px; left: 50%; transform: translateX(-50%); }
+    .bulb.top-3 { top: 10px; right: 60px; }
+
+    .bulb.left-1  { top: 150px; left: 10px; }
+    .bulb.left-2  { top: 290px; left: 10px; }
+    .bulb.left-3  { top: 430px; left: 10px; }
+    .bulb.flipper { top: 570px; left: 10px; cursor: pointer; animation: pulse 2.5s ease-in-out infinite; }
+
+    .bulb.right-1 { top: 150px; right: 10px; }
+    .bulb.right-2 { top: 290px; right: 10px; }
+    .bulb.right-3 { top: 430px; right: 10px; }
+    .bulb.knob    { top: 570px; right: 10px; cursor: grab; }
+    .bulb.knob:active { cursor: grabbing; }
+
+    @keyframes pulse {
+      0%, 100% { filter: brightness(1); }
+      50%      { filter: brightness(1.25); }
+    }
+
+    .knob::after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 5px;
+      height: 10px;
+      background: rgba(120, 70, 30, 0.7);
+      border-radius: 2px;
+    }
+
+    .mirror-container.stage-1 .bulb {
+      background: radial-gradient(circle at 35% 35%, #fff0d0 0%, #ff9a4a 40%, #cc5a1a 100%);
+      box-shadow: 0 0 30px rgba(255, 140, 60, 1), 0 0 60px rgba(255, 120, 40, 0.7), 0 0 90px rgba(255, 100, 20, 0.5);
+    }
+    .mirror-container.stage-2 .bulb {
+      background: radial-gradient(circle at 35% 35%, #fff0f5 0%, #ff9ac8 40%, #cc4a8a 100%);
+      box-shadow: 0 0 30px rgba(255, 150, 200, 1), 0 0 60px rgba(255, 130, 180, 0.7), 0 0 90px rgba(255, 110, 160, 0.5);
+    }
+    .mirror-container.stage-3 .bulb {
+      background: radial-gradient(circle at 35% 35%, #f0fcff 0%, #9ad8ff 40%, #4a98cc 100%);
+      box-shadow: 0 0 30px rgba(150, 210, 255, 1), 0 0 60px rgba(130, 190, 255, 0.7), 0 0 90px rgba(110, 170, 255, 0.5);
+    }
+    .mirror-container.stage-4 .bulb {
+      background: radial-gradient(circle at 35% 35%, #ffffff 0%, #f5f5f5 40%, #d8d8d8 100%);
+      box-shadow: 0 0 35px rgba(255, 255, 255, 1), 0 0 70px rgba(255, 255, 255, 0.85), 0 0 110px rgba(255, 255, 255, 0.65);
+    }
+
+    .flipper-hint, .knob-hint {
+      position: absolute;
+      bottom: 30px;
+      color: rgba(255, 245, 230, 0.85);
+      font-size: 13px;
+      font-style: italic;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+      z-index: 21;
+    }
+    .flipper-hint { left: 75px; }
+    .knob-hint    { right: 75px; }
+    .flipper-hint.hidden, .knob-hint.hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+
+  <!--
+    ============================================================
+    창문 (픽셀 아트 전체 배경)
+    ============================================================
+  -->
+  <div class="window">
+    <div class="glass-area">
+
+      <!--
+        SVG로 그린 픽셀 풍경
+        - viewBox를 작게(예: 200x140) 설정하고 화면 전체에 맞춰 확대
+        - image-rendering: pixelated 가 픽셀화를 담당
+        - 모든 도형을 정수 좌표에 배치 (반-픽셀 안 생기게)
+      -->
+      <svg class="scene" viewBox="0 0 200 140" preserveAspectRatio="xMidYMid slice"
+           xmlns="http://www.w3.org/2000/svg">
+
+        <!-- 하늘 (그라데이션 대신 띠 형태로 잘라서 16비트 느낌) -->
+        <rect x="0" y="0"  width="200" height="20" fill="#7cc4e8"/>
+        <rect x="0" y="20" width="200" height="20" fill="#94d4ec"/>
+        <rect x="0" y="40" width="200" height="20" fill="#b4e4f4"/>
+        <rect x="0" y="60" width="200" height="20" fill="#d4f0fc"/>
+
+        <!-- 햇빛 (좌상단) - 격자 패턴 -->
+        <rect x="20" y="8" width="8" height="8" fill="#fff8d0"/>
+        <rect x="12" y="16" width="24" height="8" fill="#fff8d0" opacity="0.7"/>
+        <rect x="20" y="24" width="8" height="8" fill="#fff8d0" opacity="0.5"/>
+
+        <!-- 멀리 있는 산 (계단 픽셀) -->
+        <g fill="#7888a0">
+          <rect x="0"   y="60" width="40" height="4"/>
+          <rect x="4"   y="56" width="32" height="4"/>
+          <rect x="8"   y="52" width="24" height="4"/>
+          <rect x="12"  y="48" width="16" height="4"/>
+          <rect x="16"  y="44" width="8"  height="4"/>
+
+          <rect x="60"  y="60" width="60" height="4"/>
+          <rect x="64"  y="56" width="52" height="4"/>
+          <rect x="72"  y="52" width="36" height="4"/>
+          <rect x="80"  y="48" width="20" height="4"/>
+          <rect x="84"  y="44" width="12" height="4"/>
+          <rect x="88"  y="40" width="4"  height="4"/>
+
+          <rect x="140" y="60" width="48" height="4"/>
+          <rect x="144" y="56" width="40" height="4"/>
+          <rect x="152" y="52" width="24" height="4"/>
+          <rect x="156" y="48" width="16" height="4"/>
+          <rect x="160" y="44" width="8"  height="4"/>
+        </g>
+
+        <!-- 산 위에 눈 (밝은 회색) -->
+        <g fill="#c8d0d8">
+          <rect x="16" y="44" width="8" height="4"/>
+          <rect x="84" y="44" width="12" height="4"/>
+          <rect x="88" y="40" width="4" height="4"/>
+          <rect x="160" y="44" width="8" height="4"/>
+        </g>
+
+        <!-- 풀밭 (계단형 픽셀) -->
+        <rect x="0" y="64" width="200" height="20" fill="#6ec048"/>
+        <rect x="0" y="84" width="200" height="20" fill="#5ca838"/>
+        <rect x="0" y="104" width="200" height="36" fill="#3c8828"/>
+
+        <!-- 풀밭 텍스처 (작은 풀 점들) -->
+        <g fill="#88d058">
+          <rect x="10" y="68" width="4" height="4"/>
+          <rect x="30" y="72" width="4" height="4"/>
+          <rect x="55" y="68" width="4" height="4"/>
+          <rect x="80" y="70" width="4" height="4"/>
+          <rect x="110" y="68" width="4" height="4"/>
+          <rect x="140" y="72" width="4" height="4"/>
+          <rect x="170" y="68" width="4" height="4"/>
+          <rect x="185" y="70" width="4" height="4"/>
+        </g>
+        <g fill="#4c9828">
+          <rect x="20" y="88" width="4" height="4"/>
+          <rect x="60" y="92" width="4" height="4"/>
+          <rect x="100" y="88" width="4" height="4"/>
+          <rect x="135" y="92" width="4" height="4"/>
+          <rect x="175" y="88" width="4" height="4"/>
+        </g>
+
+        <!-- 멀리 있는 나무들 (작은 픽셀 나무) -->
+        <g>
+          <!-- 나무 1 -->
+          <rect x="32" y="56" width="4" height="8" fill="#5a3c20"/>
+          <rect x="28" y="48" width="12" height="8" fill="#4c8830"/>
+          <rect x="24" y="52" width="20" height="4" fill="#4c8830"/>
+          <rect x="32" y="44" width="4" height="4" fill="#4c8830"/>
+
+          <!-- 나무 2 -->
+          <rect x="124" y="56" width="4" height="8" fill="#5a3c20"/>
+          <rect x="120" y="48" width="12" height="8" fill="#4c8830"/>
+          <rect x="116" y="52" width="20" height="4" fill="#4c8830"/>
+          <rect x="124" y="44" width="4" height="4" fill="#4c8830"/>
+
+          <!-- 나무 3 -->
+          <rect x="172" y="56" width="4" height="8" fill="#5a3c20"/>
+          <rect x="168" y="48" width="12" height="8" fill="#4c8830"/>
+          <rect x="164" y="52" width="20" height="4" fill="#4c8830"/>
+          <rect x="172" y="44" width="4" height="4" fill="#4c8830"/>
+        </g>
+
+        <!-- 꽃 (풀밭 위에 점점이) -->
+        <rect x="44" y="76" width="2" height="2" fill="#ff8888"/>
+        <rect x="78" y="80" width="2" height="2" fill="#fff088"/>
+        <rect x="115" y="76" width="2" height="2" fill="#ff8888"/>
+        <rect x="150" y="78" width="2" height="2" fill="#ff88cc"/>
+        <rect x="182" y="76" width="2" height="2" fill="#fff088"/>
+
+        <rect x="25" y="96" width="2" height="2" fill="#ff8888"/>
+        <rect x="65" y="98" width="2" height="2" fill="#ffffff"/>
+        <rect x="105" y="96" width="2" height="2" fill="#ff88cc"/>
+        <rect x="145" y="98" width="2" height="2" fill="#fff088"/>
+        <rect x="180" y="96" width="2" height="2" fill="#ffffff"/>
+
+      </svg>
+
+      <!--
+        떠다니는 픽셀 구름 (애니메이션 위해 SVG 밖에 별도 div로)
+        box-shadow 다중 그림자로 16비트 구름 형태를 만듦
+      -->
+      <div class="pixel-cloud c1"></div>
+      <div class="pixel-cloud c2"></div>
+      <div class="pixel-cloud c3"></div>
+
+      <!--
+        흔들리는 픽셀 잎 (앞쪽에 큰 잎들)
+        4px 단위 그리드로 픽셀스러운 잎 모양
+      -->
+      <div class="pixel-leaf" style="top: 8%;  left: 6%;  --rot: -10deg; animation-delay: 0s;"></div>
+      <div class="pixel-leaf" style="top: 14%; left: 14%; --rot:  5deg; animation-delay: -0.5s;"></div>
+      <div class="pixel-leaf" style="top: 6%;  left: 22%; --rot: -15deg; animation-delay: -1s;"></div>
+      <div class="pixel-leaf" style="top: 18%; left: 30%; --rot:  0deg; animation-delay: -1.5s;"></div>
+
+      <div class="pixel-leaf" style="top: 8%;  right: 6%;  --rot: 10deg; animation-delay: -0.3s;"></div>
+      <div class="pixel-leaf" style="top: 14%; right: 14%; --rot: -5deg; animation-delay: -0.8s;"></div>
+      <div class="pixel-leaf" style="top: 6%;  right: 22%; --rot: 15deg; animation-delay: -1.3s;"></div>
+      <div class="pixel-leaf" style="top: 18%; right: 30%; --rot: 0deg; animation-delay: -1.8s;"></div>
+
+      <!-- 아래쪽 풀 근처에도 약간 -->
+      <div class="pixel-leaf" style="bottom: 14%; left: 10%; --rot: -8deg; animation-delay: -2s;"></div>
+      <div class="pixel-leaf" style="bottom: 12%; right: 12%; --rot: 8deg; animation-delay: -2.5s;"></div>
+
+    </div>
+
+    <!-- 십자 창살 (픽셀 게임 UI 느낌) -->
+    <div class="window-bars"></div>
+  </div>
+
+  <!--
+    ============================================================
+    거울 (부드러운 상태 유지)
+    ============================================================
+  -->
+  <div class="mirror-container" id="mirrorContainer">
+    <div class="mirror-rotator" id="mirrorRotator">
+
+      <div class="mirror-frame">
+        <div class="mirror-screen">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="camera-message" id="cameraMessage">
+            거울을 켜려면 카메라 권한을 허용해주세요
+          </div>
+          <div class="overlay" id="overlay">
+            <div class="question">지금 기분이 어때요?</div>
+            <div class="buttons">
+              <button class="btn" id="btnGood">괜찮아</button>
+              <button class="btn" id="btnBad">별로야</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bulb top-1"></div>
+      <div class="bulb top-2"></div>
+      <div class="bulb top-3"></div>
+
+      <div class="bulb left-1"></div>
+      <div class="bulb left-2"></div>
+      <div class="bulb left-3"></div>
+      <div class="bulb flipper" id="flipper"></div>
+
+      <div class="bulb right-1"></div>
+      <div class="bulb right-2"></div>
+      <div class="bulb right-3"></div>
+      <div class="bulb knob" id="knob"></div>
+
+    </div>
+
+    <div class="flipper-hint" id="flipperHint">← 눌러보세요</div>
+    <div class="knob-hint" id="knobHint">돌려보세요 →</div>
+  </div>
+
+  <script>
+    // 카메라
+    const video = document.getElementById('video');
+    const cameraMessage = document.getElementById('cameraMessage');
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' }, audio: false
+        });
+        video.srcObject = stream;
+        cameraMessage.style.display = 'none';
+      } catch (err) {
+        cameraMessage.textContent = '카메라를 사용할 수 없어요.\n권한을 확인하거나 다시 시도해주세요.';
+        console.error('카메라 에러:', err);
+      }
+    }
+    startCamera();
+
+    // 거울 회전
+    const mirrorRotator = document.getElementById('mirrorRotator');
+    const flipper = document.getElementById('flipper');
+    const flipperHint = document.getElementById('flipperHint');
+    const overlay = document.getElementById('overlay');
+    const btnGood = document.getElementById('btnGood');
+    const btnBad = document.getElementById('btnBad');
+
+    let nextFlipDirection = 'up';
+    let isFlipping = false;
+
+    function flipMirror(direction) {
+      if (isFlipping) return;
+      isFlipping = true;
+      flipperHint.classList.add('hidden');
+
+      const className = direction === 'up' ? 'flip-up' : 'flip-down';
+      mirrorRotator.classList.add(className);
+
+      setTimeout(() => {
+        mirrorRotator.classList.remove(className);
+        isFlipping = false;
+      }, 1400);
+    }
+
+    flipper.addEventListener('click', () => {
+      flipMirror(nextFlipDirection);
+      nextFlipDirection = nextFlipDirection === 'up' ? 'down' : 'up';
+    });
+    btnGood.addEventListener('click', () => { flipMirror('up'); overlay.classList.add('hidden'); });
+    btnBad.addEventListener('click',  () => { flipMirror('down'); overlay.classList.add('hidden'); });
+
+    // 노브 + 오르골
+    const mirrorContainer = document.getElementById('mirrorContainer');
+    const knob = document.getElementById('knob');
+    const knobHint = document.getElementById('knobHint');
+
+    let rotation = 0, isDragging = false, lastAngle = 0;
+    let totalRotation = 0, currentStage = 0, audioStarted = false;
+
+    function getKnobCenter() {
+      const r = knob.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    function getAngle(mx, my) {
+      const c = getKnobCenter();
+      return Math.atan2(my - c.y, mx - c.x) * (180 / Math.PI);
+    }
+    function handleDragStart(x, y, e) {
+      isDragging = true;
+      lastAngle = getAngle(x, y);
+      e.preventDefault();
+    }
+    function handleDragMove(x, y) {
+      if (!isDragging) return;
+      const cur = getAngle(x, y);
+      let delta = cur - lastAngle;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      if (delta > 0) {
+        rotation += delta;
+        totalRotation += delta;
+        knob.style.transform = `rotate(${rotation}deg)`;
+        const newStage = Math.min(4, Math.floor(totalRotation / 90) + 1);
+        if (newStage !== currentStage) setStage(newStage);
+      }
+      lastAngle = cur;
+    }
+    function handleDragEnd() { isDragging = false; }
+
+    knob.addEventListener('mousedown', (e) => handleDragStart(e.clientX, e.clientY, e));
+    window.addEventListener('mousemove', (e) => handleDragMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', handleDragEnd);
+
+    knob.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      handleDragStart(t.clientX, t.clientY, e);
+    });
+    window.addEventListener('touchmove', (e) => {
+      const t = e.touches[0];
+      handleDragMove(t.clientX, t.clientY);
+    });
+    window.addEventListener('touchend', handleDragEnd);
+
+    function setStage(stage) {
+      mirrorContainer.classList.remove('stage-1', 'stage-2', 'stage-3', 'stage-4');
+      mirrorContainer.classList.add(`stage-${stage}`);
+      currentStage = stage;
+      knobHint.classList.add('hidden');
+      if (!audioStarted) { startMusicBox(); audioStarted = true; }
+    }
+
+    function startMusicBox() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880.00;
+      const melody = [
+        { freq: C5, dur: 0.5 }, { freq: C5, dur: 0.5 },
+        { freq: G5, dur: 0.5 }, { freq: G5, dur: 0.5 },
+        { freq: A5, dur: 0.5 }, { freq: A5, dur: 0.5 },
+        { freq: G5, dur: 1.0 },
+        { freq: E5, dur: 0.5 }, { freq: E5, dur: 0.5 },
+        { freq: D5, dur: 0.5 }, { freq: D5, dur: 0.5 },
+        { freq: C5, dur: 1.0 },
+      ];
+      function oscillator(freq, type) {
+        const o = audioCtx.createOscillator();
+        o.type = type;
+        o.frequency.value = freq;
+        return o;
+      }
+      function playNote(freq, startTime, duration) {
+        const osc = oscillator(freq, 'sine');
+        const osc2 = oscillator(freq * 2, 'triangle');
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(0.25, startTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        const g2 = audioCtx.createGain();
+        g2.gain.setValueAtTime(0, startTime);
+        g2.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
+        g2.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.7);
+        osc.connect(g).connect(audioCtx.destination);
+        osc2.connect(g2).connect(audioCtx.destination);
+        osc.start(startTime); osc.stop(startTime + duration);
+        osc2.start(startTime); osc2.stop(startTime + duration);
+      }
+      function playMelody(startTime) {
+        let t = startTime;
+        for (const note of melody) {
+          playNote(note.freq, t, note.dur);
+          t += note.dur;
+        }
+        setTimeout(() => playMelody(audioCtx.currentTime), (t - startTime + 0.5) * 1000);
+      }
+      playMelody(audioCtx.currentTime);
+    }
+  </script>
+</body>
+</html>

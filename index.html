@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오늘의 거울</title>
+
+  <style>
+    /* 기본 리셋 */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Georgia', serif;
+    }
+
+    /*
+      ============================================================
+      배경: 따뜻한 실내 벽 + 햇빛 글로우
+      ============================================================
+    */
+    body {
+      background:
+        radial-gradient(ellipse at 78% 22%, rgba(255, 230, 170, 0.55), transparent 50%),
+        radial-gradient(ellipse at 20% 80%, rgba(255, 180, 130, 0.3), transparent 55%),
+        linear-gradient(180deg, #d4a878 0%, #c08858 50%, #a06840 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    /*
+      창문: 거울 뒤쪽 우측에 배치
+      거울이 시선의 중심이므로 창문은 분위기용으로 적당히 작게/뒤로
+    */
+    .window {
+      position: absolute;
+      top: 8%;
+      right: 4%;
+      width: 38%;
+      height: 78%;
+      background:
+        /* 햇빛 글로우 (창 안쪽) */
+        radial-gradient(ellipse at 50% 28%, rgba(255, 240, 200, 0.65), transparent 60%),
+        /* 하늘 → 풍경 */
+        linear-gradient(180deg,
+          #b8d8e8 0%,
+          #c8e0d8 28%,
+          #a8c898 50%,
+          #88a878 75%,
+          #687858 100%);
+      border-radius: 6px;
+      box-shadow:
+        0 0 80px rgba(255, 220, 150, 0.5),
+        inset 0 0 50px rgba(255, 240, 200, 0.35);
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    /* 창틀 (가로/세로 한 줄씩, 4분할) */
+    .window::before {
+      content: '';
+      position: absolute;
+      top: 50%; left: 0; right: 0;
+      height: 10px;
+      background: linear-gradient(180deg, #f0e0c0 0%, #d8c098 100%);
+      transform: translateY(-50%);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+      z-index: 2;
+    }
+    .window::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0; left: 50%;
+      width: 10px;
+      background: linear-gradient(90deg, #f0e0c0 0%, #d8c098 100%);
+      transform: translateX(-50%);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+      z-index: 2;
+    }
+
+    /* 나뭇잎 컨테이너 */
+    .leaves {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .leaf {
+      position: absolute;
+      transform-origin: top center;
+      animation: sway 4s ease-in-out infinite;
+    }
+
+    /* 잎마다 다른 위치/속도/지연 → 자연스러움 */
+    .leaf:nth-child(1) { top: 5%;  left: 12%; animation-duration: 4.2s; }
+    .leaf:nth-child(2) { top: 10%; left: 68%; animation-duration: 5.1s; animation-delay: -1s; }
+    .leaf:nth-child(3) { top: 28%; left: 8%;  animation-duration: 3.8s; animation-delay: -2s; }
+    .leaf:nth-child(4) { top: 22%; left: 78%; animation-duration: 4.6s; animation-delay: -0.5s; }
+    .leaf:nth-child(5) { top: 58%; left: 18%; animation-duration: 5.3s; animation-delay: -1.5s; }
+    .leaf:nth-child(6) { top: 55%; left: 72%; animation-duration: 4.0s; animation-delay: -2.5s; }
+    .leaf:nth-child(7) { top: 78%; left: 38%; animation-duration: 4.8s; animation-delay: -0.8s; }
+    .leaf:nth-child(8) { top: 80%; left: 65%; animation-duration: 5.0s; animation-delay: -1.2s; }
+
+    @keyframes sway {
+      0%, 100% { transform: rotate(-10deg) translateX(0); }
+      50%      { transform: rotate(10deg) translateX(4px); }
+    }
+
+    /* 커튼 (좌, 우) */
+    .curtain {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 32%;
+      z-index: 3;
+      transform-origin: top center;
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .curtain.left {
+      left: -3%;
+      background:
+        repeating-linear-gradient(90deg,
+          rgba(220, 200, 170, 0.3) 0px,
+          transparent 14px,
+          rgba(220, 200, 170, 0.3) 28px),
+        linear-gradient(90deg,
+          rgba(255, 248, 230, 0.95) 0%,
+          rgba(248, 238, 215, 0.6) 100%);
+      animation: curtainSwayLeft 6s ease-in-out infinite;
+    }
+
+    .curtain.right {
+      right: -3%;
+      background:
+        repeating-linear-gradient(90deg,
+          rgba(220, 200, 170, 0.3) 0px,
+          transparent 14px,
+          rgba(220, 200, 170, 0.3) 28px),
+        linear-gradient(270deg,
+          rgba(255, 248, 230, 0.95) 0%,
+          rgba(248, 238, 215, 0.6) 100%);
+      animation: curtainSwayRight 6s ease-in-out infinite;
+    }
+
+    @keyframes curtainSwayLeft {
+      0%, 100% { transform: skewX(0deg) translateX(0); }
+      50%      { transform: skewX(2.5deg) translateX(5px); }
+    }
+    @keyframes curtainSwayRight {
+      0%, 100% { transform: skewX(0deg) translateX(0); }
+      50%      { transform: skewX(-2.5deg) translateX(-5px); }
+    }
+
+    /*
+      ============================================================
+      거울 컨테이너 (사이즈 한 단계 키움: 420→500, 580→680)
+      ============================================================
+    */
+    .mirror-container {
+      position: relative;
+      width: 500px;
+      height: 680px;
+      perspective: 1500px;
+      z-index: 10;
+    }
+
+    /* 회전용 래퍼 */
+    .mirror-rotator {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+    }
+
+    .mirror-rotator.flip-up   { animation: flipUp   1.4s ease-in-out; }
+    .mirror-rotator.flip-down { animation: flipDown 1.4s ease-in-out; }
+
+    @keyframes flipUp {
+      0%   { transform: rotateX(0deg); }
+      100% { transform: rotateX(360deg); }
+    }
+    @keyframes flipDown {
+      0%   { transform: rotateX(0deg); }
+      100% { transform: rotateX(-360deg); }
+    }
+
+    /* 거울 프레임 */
+    .mirror-frame {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #ece0c8 0%, #d8c4a4 50%, #c8b288 100%);
+      border-radius: 10px;
+      padding: 60px 60px;
+      box-shadow:
+        0 25px 80px rgba(0, 0, 0, 0.55),
+        inset 0 2px 6px rgba(255, 255, 255, 0.35),
+        inset 0 -2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .mirror-screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #1a0e08;
+      border-radius: 5px;
+      overflow: hidden;
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.8);
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    .camera-message {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #d4b896;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 10;
+      transition: opacity 0.8s ease;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .question {
+      color: #fff5e6;
+      font-size: 30px;
+      margin-bottom: 28px;
+      text-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.8),
+        0 0 24px rgba(255, 180, 120, 0.4);
+      letter-spacing: 1px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 14px 32px;
+      font-size: 17px;
+      font-family: 'Georgia', serif;
+      background: rgba(255, 245, 230, 0.15);
+      color: #fff5e6;
+      border: 1.5px solid rgba(255, 245, 230, 0.6);
+      border-radius: 30px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    .btn:hover {
+      background: rgba(255, 245, 230, 0.3);
+      transform: scale(1.05);
+    }
+
+    /*
+      ============================================================
+      전구 (한 사이즈 키움: 36→44px)
+      transition: 색상이 천천히 부드럽게 변하도록
+      ============================================================
+    */
+    .bulb {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff8dc 0%, #ffd98a 40%, #d4a050 100%);
+      box-shadow:
+        0 0 25px rgba(255, 220, 150, 0.9),
+        0 0 50px rgba(255, 200, 120, 0.6),
+        0 0 75px rgba(255, 180, 100, 0.4),
+        inset 0 -3px 6px rgba(180, 120, 60, 0.4);
+      z-index: 5;
+      transition: background 1.5s ease, box-shadow 1.5s ease;
+    }
+
+    /* 상단 3개 */
+    .bulb.top-1 { top: 10px; left: 60px; }
+    .bulb.top-2 { top: 10px; left: 50%; transform: translateX(-50%); }
+    .bulb.top-3 { top: 10px; right: 60px; }
+
+    /* 왼쪽 4개 (맨 아래는 flipper) */
+    .bulb.left-1  { top: 150px; left: 10px; }
+    .bulb.left-2  { top: 290px; left: 10px; }
+    .bulb.left-3  { top: 430px; left: 10px; }
+    .bulb.flipper { top: 570px; left: 10px; cursor: pointer; animation: pulse 2.5s ease-in-out infinite; }
+
+    /* 오른쪽 4개 (맨 아래는 knob) */
+    .bulb.right-1 { top: 150px; right: 10px; }
+    .bulb.right-2 { top: 290px; right: 10px; }
+    .bulb.right-3 { top: 430px; right: 10px; }
+    .bulb.knob    { top: 570px; right: 10px; cursor: grab; }
+    .bulb.knob:active { cursor: grabbing; }
+
+    @keyframes pulse {
+      0%, 100% { filter: brightness(1); }
+      50%      { filter: brightness(1.25); }
+    }
+
+    /* 노브 위 작은 표식 */
+    .knob::after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 5px;
+      height: 10px;
+      background: rgba(120, 70, 30, 0.7);
+      border-radius: 2px;
+    }
+
+    /*
+      ============================================================
+      전구 색상 단계 (모든 전구에 동시 적용)
+      .mirror-container에 .stage-1 ~ stage-4 부여
+      ============================================================
+    */
+    .mirror-container.stage-1 .bulb {
+      background: radial-gradient(circle at 35% 35%, #fff0d0 0%, #ff9a4a 40%, #cc5a1a 100%);
+      box-shadow:
+        0 0 30px rgba(255, 140, 60, 1),
+        0 0 60px rgba(255, 120, 40, 0.7),
+        0 0 90px rgba(255, 100, 20, 0.5);
+    }
+    .mirror-container.stage-2 .bulb {
+      background: radial-gradient(circle at 35% 35%, #fff0f5 0%, #ff9ac8 40%, #cc4a8a 100%);
+      box-shadow:
+        0 0 30px rgba(255, 150, 200, 1),
+        0 0 60px rgba(255, 130, 180, 0.7),
+        0 0 90px rgba(255, 110, 160, 0.5);
+    }
+    .mirror-container.stage-3 .bulb {
+      background: radial-gradient(circle at 35% 35%, #f0fcff 0%, #9ad8ff 40%, #4a98cc 100%);
+      box-shadow:
+        0 0 30px rgba(150, 210, 255, 1),
+        0 0 60px rgba(130, 190, 255, 0.7),
+        0 0 90px rgba(110, 170, 255, 0.5);
+    }
+    .mirror-container.stage-4 .bulb {
+      background: radial-gradient(circle at 35% 35%, #ffffff 0%, #f5f5f5 40%, #d8d8d8 100%);
+      box-shadow:
+        0 0 35px rgba(255, 255, 255, 1),
+        0 0 70px rgba(255, 255, 255, 0.85),
+        0 0 110px rgba(255, 255, 255, 0.65);
+    }
+
+    /* 힌트 */
+    .flipper-hint, .knob-hint {
+      position: absolute;
+      bottom: 30px;
+      color: rgba(255, 245, 230, 0.75);
+      font-size: 13px;
+      font-style: italic;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+      z-index: 11;
+    }
+    .flipper-hint { left: 75px; }
+    .knob-hint    { right: 75px; }
+    .flipper-hint.hidden, .knob-hint.hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+
+  <!-- 창문 + 나뭇잎 + 커튼 -->
+  <div class="window">
+    <div class="leaves">
+      <svg class="leaf" width="38" height="38" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#5a8848" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="32" height="32" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#6a9858" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="44" height="44" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#508040" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="36" height="36" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#78a868" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="40" height="40" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#609050" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="34" height="34" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#88b878" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="42" height="42" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#588848" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+      <svg class="leaf" width="36" height="36" viewBox="0 0 40 40"><path d="M20 4 C28 8 32 18 28 28 C24 36 16 36 12 28 C8 18 12 8 20 4 Z" fill="#6c9c58" opacity="0.88"/><path d="M20 4 L20 32" stroke="#3a6028" stroke-width="1"/></svg>
+    </div>
+    <div class="curtain left"></div>
+    <div class="curtain right"></div>
+  </div>
+
+  <!-- 거울 -->
+  <div class="mirror-container" id="mirrorContainer">
+    <div class="mirror-rotator" id="mirrorRotator">
+
+      <div class="mirror-frame">
+        <div class="mirror-screen">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="camera-message" id="cameraMessage">
+            거울을 켜려면 카메라 권한을 허용해주세요
+          </div>
+          <div class="overlay" id="overlay">
+            <div class="question">지금 기분이 어때요?</div>
+            <div class="buttons">
+              <button class="btn" id="btnGood">괜찮아</button>
+              <button class="btn" id="btnBad">별로야</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bulb top-1"></div>
+      <div class="bulb top-2"></div>
+      <div class="bulb top-3"></div>
+
+      <div class="bulb left-1"></div>
+      <div class="bulb left-2"></div>
+      <div class="bulb left-3"></div>
+      <div class="bulb flipper" id="flipper"></div>
+
+      <div class="bulb right-1"></div>
+      <div class="bulb right-2"></div>
+      <div class="bulb right-3"></div>
+      <div class="bulb knob" id="knob"></div>
+
+    </div>
+
+    <div class="flipper-hint" id="flipperHint">← 눌러보세요</div>
+    <div class="knob-hint" id="knobHint">돌려보세요 →</div>
+  </div>
+
+  <script>
+    // ============================================================
+    // 카메라 시작
+    // ============================================================
+    const video = document.getElementById('video');
+    const cameraMessage = document.getElementById('cameraMessage');
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' }, audio: false
+        });
+        video.srcObject = stream;
+        cameraMessage.style.display = 'none';
+      } catch (err) {
+        cameraMessage.textContent = '카메라를 사용할 수 없어요.\n권한을 확인하거나 다시 시도해주세요.';
+        console.error('카메라 에러:', err);
+      }
+    }
+    startCamera();
+
+    // ============================================================
+    // 거울 회전 (위/아래 360도, 회전 후 정면)
+    // 왼쪽 조명: 클릭마다 위/아래 토글
+    // [괜찮아]: 위로 회전, [별로야]: 아래로 회전
+    // ============================================================
+    const mirrorRotator = document.getElementById('mirrorRotator');
+    const flipper = document.getElementById('flipper');
+    const flipperHint = document.getElementById('flipperHint');
+    const overlay = document.getElementById('overlay');
+    const btnGood = document.getElementById('btnGood');
+    const btnBad = document.getElementById('btnBad');
+
+    let nextFlipDirection = 'up';
+    let isFlipping = false;
+
+    function flipMirror(direction) {
+      if (isFlipping) return;
+      isFlipping = true;
+      flipperHint.classList.add('hidden');
+
+      const className = direction === 'up' ? 'flip-up' : 'flip-down';
+      mirrorRotator.classList.add(className);
+
+      // 1.4초 후 클래스 제거 → 자동으로 정면 상태
+      setTimeout(() => {
+        mirrorRotator.classList.remove(className);
+        isFlipping = false;
+      }, 1400);
+    }
+
+    flipper.addEventListener('click', () => {
+      flipMirror(nextFlipDirection);
+      nextFlipDirection = nextFlipDirection === 'up' ? 'down' : 'up';
+    });
+
+    btnGood.addEventListener('click', () => {
+      flipMirror('up');
+      overlay.classList.add('hidden');
+    });
+
+    btnBad.addEventListener('click', () => {
+      flipMirror('down');
+      overlay.classList.add('hidden');
+    });
+
+    // ============================================================
+    // 노브 회전 → 모든 전구 색 변경 + 오르골 음악
+    // ============================================================
+    const mirrorContainer = document.getElementById('mirrorContainer');
+    const knob = document.getElementById('knob');
+    const knobHint = document.getElementById('knobHint');
+
+    let rotation = 0;
+    let isDragging = false;
+    let lastAngle = 0;
+    let totalRotation = 0;
+    let currentStage = 0;
+    let audioStarted = false;
+
+    function getKnobCenter() {
+      const r = knob.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    function getAngle(mx, my) {
+      const c = getKnobCenter();
+      return Math.atan2(my - c.y, mx - c.x) * (180 / Math.PI);
+    }
+    function handleDragStart(x, y, e) {
+      isDragging = true;
+      lastAngle = getAngle(x, y);
+      e.preventDefault();
+    }
+    function handleDragMove(x, y) {
+      if (!isDragging) return;
+      const cur = getAngle(x, y);
+      let delta = cur - lastAngle;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      if (delta > 0) {
+        rotation += delta;
+        totalRotation += delta;
+        knob.style.transform = `rotate(${rotation}deg)`;
+        const newStage = Math.min(4, Math.floor(totalRotation / 90) + 1);
+        if (newStage !== currentStage) setStage(newStage);
+      }
+      lastAngle = cur;
+    }
+    function handleDragEnd() { isDragging = false; }
+
+    knob.addEventListener('mousedown', (e) => handleDragStart(e.clientX, e.clientY, e));
+    window.addEventListener('mousemove', (e) => handleDragMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', handleDragEnd);
+
+    knob.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      handleDragStart(t.clientX, t.clientY, e);
+    });
+    window.addEventListener('touchmove', (e) => {
+      const t = e.touches[0];
+      handleDragMove(t.clientX, t.clientY);
+    });
+    window.addEventListener('touchend', handleDragEnd);
+
+    function setStage(stage) {
+      mirrorContainer.classList.remove('stage-1', 'stage-2', 'stage-3', 'stage-4');
+      mirrorContainer.classList.add(`stage-${stage}`);
+      currentStage = stage;
+      knobHint.classList.add('hidden');
+      if (!audioStarted) {
+        startMusicBox();
+        audioStarted = true;
+      }
+    }
+
+    // ============================================================
+    // 오르골 멜로디 (Web Audio)
+    // ============================================================
+    function startMusicBox() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      const C5 = 523.25, D5 = 587.33, E5 = 659.25;
+      const G5 = 783.99, A5 = 880.00;
+
+      const melody = [
+        { freq: C5, dur: 0.5 }, { freq: C5, dur: 0.5 },
+        { freq: G5, dur: 0.5 }, { freq: G5, dur: 0.5 },
+        { freq: A5, dur: 0.5 }, { freq: A5, dur: 0.5 },
+        { freq: G5, dur: 1.0 },
+        { freq: E5, dur: 0.5 }, { freq: E5, dur: 0.5 },
+        { freq: D5, dur: 0.5 }, { freq: D5, dur: 0.5 },
+        { freq: C5, dur: 1.0 },
+      ];
+
+      function oscillator(freq, type) {
+        const o = audioCtx.createOscillator();
+        o.type = type;
+        o.frequency.value = freq;
+        return o;
+      }
+
+      function playNote(freq, startTime, duration) {
+        const osc = oscillator(freq, 'sine');
+        const osc2 = oscillator(freq * 2, 'triangle');
+
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(0.25, startTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+        const g2 = audioCtx.createGain();
+        g2.gain.setValueAtTime(0, startTime);
+        g2.gain.linearRampToValueAtTime(0.08, startTime + 0.01);
+        g2.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.7);
+
+        osc.connect(g).connect(audioCtx.destination);
+        osc2.connect(g2).connect(audioCtx.destination);
+
+        osc.start(startTime); osc.stop(startTime + duration);
+        osc2.start(startTime); osc2.stop(startTime + duration);
+      }
+
+      function playMelody(startTime) {
+        let t = startTime;
+        for (const note of melody) {
+          playNote(note.freq, t, note.dur);
+          t += note.dur;
+        }
+        setTimeout(() => playMelody(audioCtx.currentTime), (t - startTime + 0.5) * 1000);
+      }
+
+      playMelody(audioCtx.currentTime);
+    }
+  </script>
+</body>
+</html>
